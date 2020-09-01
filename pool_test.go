@@ -27,7 +27,7 @@ func TestPool(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, conn)
 
-		require.Equal(t, i+1, p.numOpen)
+		require.Equal(t, i+1, p.NumOpenConns())
 
 		conns[i] = conn
 	}
@@ -44,7 +44,7 @@ func TestPool(t *testing.T) {
 		conn, err := p.Get()
 		require.NoError(t, err)
 		require.NotNil(t, conn)
-		require.Equal(t, p.maxOpen, p.numOpen)
+		require.Equal(t, p.maxOpen, p.NumOpenConns())
 		conn.Release()
 	}()
 
@@ -64,8 +64,8 @@ func TestPool(t *testing.T) {
 	}
 	//
 	// make sure we have free connections matching open connections and are less than idle connections
-	require.Equal(t, len(p.freeConn), p.numOpen)
-	require.LessOrEqual(t, p.numOpen, p.maxIdle)
+	require.Equal(t, len(p.freeConn), p.NumOpenConns())
+	require.LessOrEqual(t, p.NumOpenConns(), p.maxIdle)
 
 	// close and make sure we cannot get a connection
 	p.Close()
@@ -94,7 +94,7 @@ func TestPool_ConnectionsExpire(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, conn)
 
-		require.Equal(t, i+1, p.numOpen)
+		require.Equal(t, i+1, p.NumOpenConns())
 
 		conns[i] = conn
 	}
@@ -105,8 +105,8 @@ func TestPool_ConnectionsExpire(t *testing.T) {
 	}
 
 	// make sure we have free connections matching open connections and are less than idle connections
-	require.Equal(t, len(p.freeConn), p.numOpen)
-	require.LessOrEqual(t, p.numOpen, p.maxIdle)
+	require.Equal(t, len(p.freeConn), p.NumOpenConns())
+	require.LessOrEqual(t, p.NumOpenConns(), p.maxIdle)
 
 	conn, err := p.Get()
 	require.NoError(t, err)
@@ -116,13 +116,13 @@ func TestPool_ConnectionsExpire(t *testing.T) {
 	<-time.After(time.Second * 2)
 
 	// make sure all connections except the one that is open have been cleaned up
-	require.Equal(t, 1, p.numOpen)
+	require.Equal(t, 1, p.NumOpenConns())
 
 	// close the conn
 	conn.Close()
 
 	// make sure returning expired connections do not add them to the pool
-	require.Equal(t, 0, p.numOpen)
+	require.Equal(t, 0, p.NumOpenConns())
 }
 
 func BenchmarkPool_GetAndReleaseInSequence(b *testing.B) {

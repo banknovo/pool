@@ -141,8 +141,8 @@ func (p *Pool) Close() {
 	p.mu.Unlock()
 }
 
-// Open returns the approximate number of open connections in the pool.
-func (p *Pool) Open() int {
+// NumOpenConns returns the approximate number of open connections in the pool.
+func (p *Pool) NumOpenConns() int {
 	return p.numOpen
 }
 
