@@ -305,12 +305,10 @@ func (p *Pool) putConn(conn *Conn, err error) {
 		return
 	}
 
-	// if connection is expired or closed, close it (since close is idempotent) and decrement the open connections
-	// don't add it back to the pool
-	if conn.closed || conn.expired(p.maxLifeTime) {
+	// if connection is already closed, decrement the open connections and don't add it back to the pool
+	if conn.closed {
 		p.numOpen--
 		p.mu.Unlock()
-		conn.close()
 		return
 	}
 
