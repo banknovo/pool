@@ -167,11 +167,13 @@ func (p *Pool) conn(strategy connReuseStrategy) (*Conn, error) {
 		copy(p.freeConn, p.freeConn[1:])
 		p.freeConn = p.freeConn[:numFree-1]
 		conn.inUse = true
-		p.mu.Unlock()
 		if conn.expired(lifetime) {
+			p.numOpen--
+			p.mu.Unlock()
 			conn.close()
 			return nil, errBadConn
 		}
+		p.mu.Unlock()
 		return conn, nil
 	}
 
@@ -230,10 +232,7 @@ func (p *Pool) conn(strategy connReuseStrategy) (*Conn, error) {
 		p.mu.Unlock()
 		return nil, err
 	}
-	p.mu.Lock()
-	conn := &Conn{p: p, createdAt: time.Now(), Conn: c}
-	p.mu.Unlock()
-	return conn, nil
+	return &Conn{p: p, createdAt: time.Now(), Conn: c, inUse: true}, nil
 }
 
 // nextRequestKeyLocked returns the next Conn request key.
@@ -352,20 +351,23 @@ func (p *Pool) openNewConnection() {
 	// maybeOpenNewConnctions has already executed numOpen++ before it sent
 	// on openerCh. This function must execute numOpen-- if the
 	// connection fails or is closed before returning.
+	c, err := p.factory()
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if p.closed {
+		if err == nil {
+			_ = c.Close()
+		}
 		p.numOpen--
 		return
 	}
-	c, err := p.factory()
 	if err != nil {
 		p.numOpen--
 		p.putConnLocked(nil, err)
 		p.maybeOpenNewConnections()
 		return
 	}
-	conn := &Conn{p: p, createdAt: time.Now(), Conn: c}
+	conn := &Conn{p: p, createdAt: time.Now(), Conn: c, inUse: true}
 	if !p.putConnLocked(conn, err) {
 		p.numOpen--
 		_ = c.Close()

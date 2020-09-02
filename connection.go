@@ -35,6 +35,7 @@ func (c *Conn) close() {
 	if c.closed {
 		return
 	}
+	c.inUse = false
 	c.closed = true
 	_ = c.Conn.Close()
 	return
