@@ -168,6 +168,7 @@ func (p *Pool) conn(strategy connReuseStrategy) (*Conn, error) {
 		p.freeConn = p.freeConn[:numFree-1]
 		conn.inUse = true
 		if conn.expired(lifetime) {
+			p.maxLifetimeClosed += 1
 			p.numOpen--
 			p.mu.Unlock()
 			conn.close()
@@ -376,7 +377,7 @@ func (p *Pool) openNewConnection() {
 
 // startCleanerLocked starts connectionCleaner if needed.
 func (p *Pool) startCleanerLocked() {
-	if p.numOpen > 0 && p.cleanerCh == nil {
+	if p.cleanTime > 0 && p.numOpen > 0 && p.cleanerCh == nil {
 		p.cleanerCh = make(chan struct{}, 1)
 		go p.connectionCleaner(p.cleanTime)
 	}
@@ -392,18 +393,16 @@ func (p *Pool) connectionCleaner(d time.Duration) {
 		}
 
 		p.mu.Lock()
-		d = p.maxLifeTime
-		if p.closed || p.numOpen == 0 || d <= 0 {
+		if p.closed || p.numOpen == 0 {
 			p.cleanerCh = nil
 			p.mu.Unlock()
 			return
 		}
 
-		expiredSince := time.Now().Add(-d)
 		var closing []*Conn
 		for i := 0; i < len(p.freeConn); i++ {
 			conn := p.freeConn[i]
-			if conn.createdAt.Before(expiredSince) {
+			if conn.expired(p.maxLifeTime) {
 				closing = append(closing, conn)
 				last := len(p.freeConn) - 1
 				p.freeConn[i] = p.freeConn[last]
