@@ -93,6 +93,7 @@ func TestPool_ConnectionsExpire(t *testing.T) {
 		MaxIdleConnections: 3,
 		GetTimeout:         time.Second,
 		ConnLifeTime:       time.Millisecond * 500,
+		ConnCleanTime:      time.Millisecond * 100,
 	}
 	p, err := New(o)
 	require.NoError(t, err)
@@ -143,26 +144,4 @@ func TestPool_ConnectionsExpire(t *testing.T) {
 	require.Equal(t, uint64(2), stats.MaxIdleClosed)
 	require.Equal(t, uint64(2), stats.MaxLifetimeClosed)
 	require.Equal(t, int64(0), stats.WaitDuration.Milliseconds())
-}
-
-func BenchmarkPool_GetAndReleaseInSequence(b *testing.B) {
-	o := &Options{
-		Factory: func() (net.Conn, error) {
-			return &fakeConnection{}, nil
-		},
-		MaxConnections: b.N,
-		ConnLifeTime:   time.Minute,
-		GetTimeout:     time.Microsecond,
-	}
-	p, _ := New(o)
-	conns := make([]*Conn, b.N)
-	b.ReportAllocs()
-	b.StartTimer()
-
-	for i := 0; i < b.N; i++ {
-		conns[i], _ = p.Get()
-	}
-	for i := 0; i < b.N; i++ {
-		conns[i].Release()
-	}
 }

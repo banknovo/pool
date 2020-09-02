@@ -63,6 +63,7 @@ type Pool struct {
 
 	maxLifeTime time.Duration // maximum amount of time a Conn may be reused
 	maxWaitTime time.Duration // maximum amount of time to wait for a Conn before throwing error
+	cleanTime   time.Duration // run the cleaner at this interval to check for expired connections
 	closed      bool
 
 	// used for stats
@@ -291,7 +292,7 @@ func (p *Pool) putConnLocked(c *Conn, err error) bool {
 	} else if err == nil {
 		if p.maxIdle > len(p.freeConn) {
 			p.freeConn = append(p.freeConn, c)
-			p.startCleaner()
+			p.startCleanerLocked()
 			return true
 		}
 		p.maxIdleClosed++
@@ -370,11 +371,11 @@ func (p *Pool) openNewConnection() {
 	}
 }
 
-// startCleaner starts connectionCleaner if needed.
-func (p *Pool) startCleaner() {
-	if p.maxLifeTime > 0 && p.numOpen > 0 && p.cleanerCh == nil {
+// startCleanerLocked starts connectionCleaner if needed.
+func (p *Pool) startCleanerLocked() {
+	if p.numOpen > 0 && p.cleanerCh == nil {
 		p.cleanerCh = make(chan struct{}, 1)
-		go p.connectionCleaner(p.maxLifeTime)
+		go p.connectionCleaner(p.cleanTime)
 	}
 }
 
@@ -410,11 +411,11 @@ func (p *Pool) connectionCleaner(d time.Duration) {
 		}
 
 		p.maxLifetimeClosed += uint64(len(closing))
+		p.numOpen -= len(closing)
 		p.mu.Unlock()
 
 		for _, conn := range closing {
 			conn.close()
-			p.numOpen--
 		}
 
 		t.Reset(d)

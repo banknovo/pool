@@ -6,8 +6,9 @@ import (
 )
 
 const (
-	defaultGetTimeout   = time.Second * 10
-	defaultConnLifeTime = time.Minute * 60
+	defaultGetTimeout    = time.Second * 10
+	defaultConnLifeTime  = time.Minute * 60
+	defaultConnCleanTime = time.Minute * 15
 )
 
 // Options to create a new Pool
@@ -26,6 +27,10 @@ type Options struct {
 
 	// ConnLifeTime is the total amount of time a connection should be used before closing it
 	ConnLifeTime time.Duration
+
+	// ConnCleanTime is the periodic time interval after which pool checks for expired connections and closes them
+	// this value should ideally be lesser than ConnLifeTime to avoid filling up the pool too much
+	ConnCleanTime time.Duration
 }
 
 func (o *Options) validate() error {
@@ -43,6 +48,9 @@ func (o *Options) validate() error {
 	}
 	if o.ConnLifeTime == 0 {
 		o.ConnLifeTime = defaultConnLifeTime
+	}
+	if o.ConnCleanTime == 0 {
+		o.ConnCleanTime = defaultConnCleanTime
 	}
 	return nil
 }
