@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -39,6 +40,8 @@ type connRequest struct {
 // Pool is a connection pool of underlying connections.
 // It is safe to be used by multiple goroutines
 type Pool struct {
+	waitDuration int64 // Total time waited for new connections.
+
 	// factory is a function to create new connections
 	factory Factory
 
@@ -61,6 +64,11 @@ type Pool struct {
 	maxLifeTime time.Duration // maximum amount of time a Conn may be reused
 	maxWaitTime time.Duration // maximum amount of time to wait for a Conn before throwing error
 	closed      bool
+
+	// used for stats
+	waitCount         uint64 // Total number of connections waited for.
+	maxIdleClosed     uint64 // Total number of connections closed due to idle.
+	maxLifetimeClosed uint64 // Total number of connections closed due to max free limit.
 }
 
 // New returns a new pool which needs to be closed by calling Pool.Close.
@@ -131,6 +139,7 @@ func (p *Pool) Close() {
 		close(p.openerCh)
 	}
 	for _, c := range p.freeConn {
+		p.numOpen--
 		c.close()
 	}
 	p.freeConn = nil
@@ -139,11 +148,6 @@ func (p *Pool) Close() {
 		close(req)
 	}
 	p.mu.Unlock()
-}
-
-// NumOpenConns returns the approximate number of open connections in the pool.
-func (p *Pool) NumOpenConns() int {
-	return p.numOpen
 }
 
 func (p *Pool) conn(strategy connReuseStrategy) (*Conn, error) {
@@ -174,10 +178,14 @@ func (p *Pool) conn(strategy connReuseStrategy) (*Conn, error) {
 		req := make(chan connRequest, 1)
 		reqKey := p.nextRequestKeyLocked()
 		p.connRequests[reqKey] = req
+		p.waitCount++
 		p.mu.Unlock()
+
+		waitStart := time.Now()
 
 		select {
 		case ret, ok := <-req:
+			atomic.AddInt64(&p.waitDuration, int64(time.Since(waitStart)))
 			if !ok {
 				return nil, ErrPoolClosed
 			}
@@ -190,6 +198,8 @@ func (p *Pool) conn(strategy connReuseStrategy) (*Conn, error) {
 			}
 			return ret.conn, ret.err
 		case <-time.After(p.maxWaitTime):
+			atomic.AddInt64(&p.waitDuration, int64(time.Since(waitStart)))
+
 			// Remove the connRequest and ensure no value has been sent
 			// on it after removing.
 			p.mu.Lock()
@@ -284,6 +294,7 @@ func (p *Pool) putConnLocked(c *Conn, err error) bool {
 			p.startCleaner()
 			return true
 		}
+		p.maxIdleClosed++
 	}
 	return false
 }
@@ -397,6 +408,8 @@ func (p *Pool) connectionCleaner(d time.Duration) {
 				i--
 			}
 		}
+
+		p.maxLifetimeClosed += uint64(len(closing))
 		p.mu.Unlock()
 
 		for _, conn := range closing {

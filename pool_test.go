@@ -27,7 +27,7 @@ func TestPool(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, conn)
 
-		require.Equal(t, i+1, p.NumOpenConns())
+		require.Equal(t, i+1, p.numOpen)
 
 		conns[i] = conn
 	}
@@ -44,7 +44,7 @@ func TestPool(t *testing.T) {
 		conn, err := p.Get()
 		require.NoError(t, err)
 		require.NotNil(t, conn)
-		require.Equal(t, p.maxOpen, p.NumOpenConns())
+		require.Equal(t, p.maxOpen, p.numOpen)
 		conn.Release()
 	}()
 
@@ -62,16 +62,26 @@ func TestPool(t *testing.T) {
 	for i := 0; i < p.maxOpen-1; i++ {
 		conns[i].Release()
 	}
-	//
+
 	// make sure we have free connections matching open connections and are less than idle connections
-	require.Equal(t, len(p.freeConn), p.NumOpenConns())
-	require.LessOrEqual(t, p.NumOpenConns(), p.maxIdle)
+	require.Equal(t, len(p.freeConn), p.numOpen)
+	require.LessOrEqual(t, p.numOpen, p.maxIdle)
 
 	// close and make sure we cannot get a connection
 	p.Close()
 	_, err = p.Get()
 	require.Error(t, err)
 	require.Equal(t, ErrPoolClosed, err)
+
+	// assert stats
+	stats := p.GetStats()
+	require.Equal(t, 0, stats.InUse)
+	require.Equal(t, 0, stats.OpenConnections)
+	require.Equal(t, 0, stats.Idle)
+	require.Equal(t, uint64(2), stats.WaitCount)
+	require.Equal(t, uint64(2), stats.MaxIdleClosed)
+	require.Equal(t, uint64(0), stats.MaxLifetimeClosed)
+	require.GreaterOrEqual(t, stats.WaitDuration.Milliseconds(), time.Second.Milliseconds())
 }
 
 func TestPool_ConnectionsExpire(t *testing.T) {
@@ -94,7 +104,7 @@ func TestPool_ConnectionsExpire(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, conn)
 
-		require.Equal(t, i+1, p.NumOpenConns())
+		require.Equal(t, i+1, p.numOpen)
 
 		conns[i] = conn
 	}
@@ -105,8 +115,8 @@ func TestPool_ConnectionsExpire(t *testing.T) {
 	}
 
 	// make sure we have free connections matching open connections and are less than idle connections
-	require.Equal(t, len(p.freeConn), p.NumOpenConns())
-	require.LessOrEqual(t, p.NumOpenConns(), p.maxIdle)
+	require.Equal(t, len(p.freeConn), p.numOpen)
+	require.LessOrEqual(t, p.numOpen, p.maxIdle)
 
 	conn, err := p.Get()
 	require.NoError(t, err)
@@ -116,13 +126,23 @@ func TestPool_ConnectionsExpire(t *testing.T) {
 	<-time.After(time.Second * 2)
 
 	// make sure all connections except the one that is open have been cleaned up
-	require.Equal(t, 1, p.NumOpenConns())
+	require.Equal(t, 1, p.numOpen)
 
 	// close the conn
 	conn.Close()
 
 	// make sure returning expired connections do not add them to the pool
-	require.Equal(t, 0, p.NumOpenConns())
+	require.Equal(t, 0, p.numOpen)
+
+	// assert stats
+	stats := p.GetStats()
+	require.Equal(t, 0, stats.InUse)
+	require.Equal(t, 0, stats.OpenConnections)
+	require.Equal(t, 0, stats.Idle)
+	require.Equal(t, uint64(0), stats.WaitCount)
+	require.Equal(t, uint64(2), stats.MaxIdleClosed)
+	require.Equal(t, uint64(2), stats.MaxLifetimeClosed)
+	require.Equal(t, int64(0), stats.WaitDuration.Milliseconds())
 }
 
 func BenchmarkPool_GetAndReleaseInSequence(b *testing.B) {
