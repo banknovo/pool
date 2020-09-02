@@ -7,18 +7,18 @@ import (
 
 // Stats contains pool statistics
 type Stats struct {
-	MaxOpenConnections int // Maximum number of open connections to the database.
+	MaxOpenConnections int `json:"MaxOpenConnections"` // Maximum number of open connections to the database.
 
 	// Pool Status
-	OpenConnections int // The number of established connections both in use and idle.
-	InUse           int // The number of connections currently in use.
-	Idle            int // The number of idle connections.
+	OpenConnections int `json:"OpenConnections"` // The number of established connections both in use and idle.
+	InUse           int `json:"InUse"`           // The number of connections currently in use.
+	Idle            int `json:"Idle"`            // The number of idle connections.
 
 	// Counters
-	WaitCount         uint64        // The total number of connections waited for.
-	WaitDuration      time.Duration // The total time blocked waiting for a new connection.
-	MaxIdleClosed     uint64        // The total number of connections closed due to MaxIdleConnections.
-	MaxLifetimeClosed uint64        // The total number of connections closed due to ConnLifeTime.
+	WaitCount         uint64        `json:"WaitCount"`         // The total number of connections waited for.
+	WaitDuration      time.Duration `json:"WaitDuration"`      // The total time blocked waiting for a new connection.
+	MaxIdleClosed     uint64        `json:"MaxIdleClosed"`     // The total number of connections closed due to MaxIdleConnections.
+	MaxLifetimeClosed uint64        `json:"MaxLifetimeClosed"` // The total number of connections closed due to ConnLifeTime.
 }
 
 // GetStats returns pool statistics.
