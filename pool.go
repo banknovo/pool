@@ -92,6 +92,7 @@ func New(opts *Options) (*Pool, error) {
 		openerCh:     make(chan struct{}, connectionRequestQueueSize),
 		maxLifeTime:  opts.ConnLifeTime,
 		maxWaitTime:  opts.GetTimeout,
+		cleanTime:    opts.ConnCleanTime,
 	}
 
 	go p.connectionOpener()
