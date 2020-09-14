@@ -53,12 +53,6 @@ type Pool struct {
 	maxOpen      int    // max number of open connections
 	maxIdle      int    // max number of idle connections
 
-	// Used to signal the need for new connections
-	// a goroutine running connectionOpener() reads on this chan and
-	// maybeOpenNewConnections sends on the chan (one send per needed connection)
-	// It is closed during Pool.Close. The close tells the connectionOpener
-	// goroutine to exit.
-	openerCh  chan struct{}
 	cleanerCh chan struct{} // struct to signal cleaning of free connections
 
 	maxLifeTime time.Duration // maximum amount of time a Conn may be reused
@@ -81,21 +75,15 @@ func New(opts *Options) (*Pool, error) {
 		return nil, err
 	}
 
-	// this needs to be greater than MaxConnections so that we don't block adding into the queue
-	connectionRequestQueueSize := opts.MaxConnections + 1
-
 	p := &Pool{
 		factory:      opts.Factory,
 		connRequests: make(map[uint64]chan connRequest),
 		maxOpen:      opts.MaxConnections,
 		maxIdle:      opts.MaxIdleConnections,
-		openerCh:     make(chan struct{}, connectionRequestQueueSize),
 		maxLifeTime:  opts.ConnLifeTime,
 		maxWaitTime:  opts.GetTimeout,
 		cleanTime:    opts.ConnCleanTime,
 	}
-
-	go p.connectionOpener()
 
 	return p, nil
 }
@@ -136,9 +124,6 @@ func (p *Pool) Close() {
 	}
 	if p.cleanerCh != nil {
 		close(p.cleanerCh)
-	}
-	if p.openerCh != nil {
-		close(p.openerCh)
 	}
 	for _, c := range p.freeConn {
 		p.numOpen--
@@ -229,7 +214,6 @@ func (p *Pool) conn(strategy connReuseStrategy) (*Conn, error) {
 	if err != nil {
 		p.mu.Lock()
 		p.numOpen-- // correct for earlier optimism
-		p.maybeOpenNewConnections()
 		p.mu.Unlock()
 		return nil, err
 	}
@@ -242,26 +226,6 @@ func (p *Pool) nextRequestKeyLocked() uint64 {
 	next := p.nextRequest
 	p.nextRequest++
 	return next
-}
-
-// If there are connRequests and the Conn limit hasn't been reached,
-// then tell the connectionOpener to open new connections.
-func (p *Pool) maybeOpenNewConnections() {
-	numRequests := len(p.connRequests)
-	if p.maxOpen > 0 {
-		numCanOpen := p.maxOpen - p.numOpen
-		if numRequests > numCanOpen {
-			numRequests = numCanOpen
-		}
-	}
-	for numRequests > 0 {
-		p.numOpen++ // optimistically
-		numRequests--
-		if p.closed {
-			return
-		}
-		p.openerCh <- struct{}{}
-	}
 }
 
 // putConnLocked will satisfy a connRequest if there is one, or it will
@@ -311,7 +275,6 @@ func (p *Pool) putConn(conn *Conn, err error) {
 		// Don't reuse bad connections.
 		// Since the conn is considered bad and is being discarded, treat it
 		// as closed.
-		p.maybeOpenNewConnections()
 		p.numOpen--
 		p.mu.Unlock()
 		conn.close()
@@ -333,46 +296,6 @@ func (p *Pool) putConn(conn *Conn, err error) {
 		return
 	}
 	p.mu.Unlock()
-}
-
-// Runs in a separate goroutine, opens new connections when requested.
-func (p *Pool) connectionOpener() {
-	for {
-		if p.closed {
-			return
-		}
-		select {
-		case <-p.openerCh:
-			p.openNewConnection()
-		}
-	}
-}
-
-func (p *Pool) openNewConnection() {
-	// maybeOpenNewConnctions has already executed numOpen++ before it sent
-	// on openerCh. This function must execute numOpen-- if the
-	// connection fails or is closed before returning.
-	c, err := p.factory()
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	if p.closed {
-		if err == nil {
-			_ = c.Close()
-		}
-		p.numOpen--
-		return
-	}
-	if err != nil {
-		p.numOpen--
-		p.putConnLocked(nil, err)
-		p.maybeOpenNewConnections()
-		return
-	}
-	conn := &Conn{p: p, createdAt: time.Now(), Conn: c, inUse: true}
-	if !p.putConnLocked(conn, err) {
-		p.numOpen--
-		_ = c.Close()
-	}
 }
 
 // startCleanerLocked starts connectionCleaner if needed.
