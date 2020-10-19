@@ -1,5 +1,7 @@
  # Pool ![Tests](https://github.com/banknovo/pool/workflows/Tests/badge.svg)
 
+**Note**: Although we use this library in our Production environment, it is still evolving and API is not yet final. There maybe breaking changes. Consider this in Beta until there is a v1.0 release.
+
 Pool is a connection pool for net.Conn interface.
 
 This implementation is a extracted from the db connection pool used in [Go's database/sql/sql.go](https://github.com/golang/go/blob/master/src/database/sql/sql.go) and necessary changes made to work with net.Conn connections.
@@ -18,7 +20,7 @@ Install the package with:
 go get github.com/banknovo/pool
 ```
 
-## Example
+## Usage
 
 ```go
 // create options
@@ -43,13 +45,13 @@ conn, err := p.Get()
 // to the pool).
 conn.Release()
 
-// if connection was priviledged or had an error, close it out instead of returning
-// a bad connection to the pool
-conn.Close()
+// if connection was priviledged or had an error, mark it as unusable
+// Unusable connections are closed and not returned to the pool
+conn.MarkUnusable()
+conn.Release()
 
-// open connections in the pool
-// this number will be approximate since there is no locking for performance reasons
-currOpen := p.Open()
+// Stats on connection pool
+stats := p.Stats()
 
 // close pool, this closes all the connections inside a pool and it cannot be used again
 p.Close()

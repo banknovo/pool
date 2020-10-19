@@ -17,6 +17,7 @@ type Conn struct {
 	mu sync.Mutex // guards following
 	net.Conn
 	closed bool
+	unusable bool
 
 	// guarded by pool's mutex
 	inUse bool
@@ -41,11 +42,11 @@ func (c *Conn) close() {
 	return
 }
 
-// Close closes the underlying connection.
-// This connection is not put back into the connection pool.
-func (c *Conn) Close() {
-	c.close()
-	c.p.putConn(c, nil)
+// MarkUnusable marks the connection not usable any more, to let the pool close it instead of returning it to pool.
+func (c *Conn) MarkUnusable() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.unusable = true
 }
 
 // Release releases the connection and puts it back to the connection pool

@@ -153,7 +153,7 @@ func (p *Pool) conn(strategy connReuseStrategy) (*Conn, error) {
 		p.freeConn = p.freeConn[:numFree-1]
 		conn.inUse = true
 		if conn.expired(lifetime) {
-			p.maxLifetimeClosed += 1
+			p.maxLifetimeClosed++
 			p.numOpen--
 			p.mu.Unlock()
 			conn.close()
@@ -281,8 +281,8 @@ func (p *Pool) putConn(conn *Conn, err error) {
 		return
 	}
 
-	// if connection is already closed, decrement the open connections and don't add it back to the pool
-	if conn.closed {
+	// if connection is unusable, decrement the open connections and don't add it back to the pool
+	if conn.unusable {
 		p.numOpen--
 		p.mu.Unlock()
 		return
@@ -300,7 +300,7 @@ func (p *Pool) putConn(conn *Conn, err error) {
 
 // startCleanerLocked starts connectionCleaner if needed.
 func (p *Pool) startCleanerLocked() {
-	if p.cleanTime > 0 && p.numOpen > 0 && p.cleanerCh == nil {
+	if p.cleanerCh == nil && p.numOpen > 0 && p.cleanTime > 0 {
 		p.cleanerCh = make(chan struct{}, 1)
 		go p.connectionCleaner(p.cleanTime)
 	}

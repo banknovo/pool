@@ -129,10 +129,11 @@ func TestPool_ConnectionsExpire(t *testing.T) {
 	// make sure all connections except the one that is open have been cleaned up
 	require.Equal(t, 1, p.numOpen)
 
-	// close the conn
-	conn.Close()
+	// mark connection as unusable and return back to pool
+	conn.MarkUnusable()
+	conn.Release()
 
-	// make sure returning expired connections do not add them to the pool
+	// make sure returning unusable connections do not add them to the pool
 	require.Equal(t, 0, p.numOpen)
 
 	// assert stats
