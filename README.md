@@ -10,7 +10,7 @@ The majority of open source implementations of a connection pool on GitHub are d
 But the base library had missing features, and forking and modifying the code results in a different implementation enough not to be called a fork.
 
 The pool returns a wrapper object `*pool.Conn` instead of `net.Conn` from the pool's `Get()` method.
-The reason this was done is because we need a way for external clients to close a connection `conn.Close()` and also return it back to the pool `conn.Release()`.   
+The reason this was done is because we needed a way for clients to call internal connection's wrapper methods `conn.MarkUnusable()` and `conn.Release()`.
 
 ## Installation
 
