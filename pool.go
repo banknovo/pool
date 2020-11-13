@@ -271,20 +271,13 @@ func (p *Pool) putConn(conn *Conn, err error) {
 	p.mu.Lock()
 	conn.inUse = false
 
-	if err == errBadConn {
-		// Don't reuse bad connections.
-		// Since the conn is considered bad and is being discarded, treat it
-		// as closed.
+	// Don't reuse bad/unusable connections
+	// Since the conn is considered bad and is being discarded, treat it
+	// as closed.
+	if conn.unusable || err == errBadConn {
 		p.numOpen--
 		p.mu.Unlock()
 		conn.close()
-		return
-	}
-
-	// if connection is unusable, decrement the open connections and don't add it back to the pool
-	if conn.unusable {
-		p.numOpen--
-		p.mu.Unlock()
 		return
 	}
 
