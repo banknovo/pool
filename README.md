@@ -1,7 +1,5 @@
  # Pool ![Tests](https://github.com/banknovo/pool/workflows/Tests/badge.svg)
 
-**Note**: Although we use this library in our Production environment, it is still evolving and API is not yet final. There maybe breaking changes. Consider this in Beta until there is a v1.0 release.
-
 Pool is a connection pool for net.Conn interface.
 
 This implementation is a extracted from the db connection pool used in [Go's database/sql/sql.go](https://github.com/golang/go/blob/master/src/database/sql/sql.go) and necessary changes made to work with net.Conn connections.
@@ -11,6 +9,8 @@ But the base library had missing features, and forking and modifying the code re
 
 The pool returns a wrapper object `*pool.Conn` instead of `net.Conn` from the pool's `Get()` method.
 The reason this was done is because we needed a way for clients to call internal connection's wrapper methods `conn.MarkUnusable()` and `conn.Release()`.
+
+This library is used in Production for certain services at [Novo](https://banknovo.com).
 
 ## Installation
 
